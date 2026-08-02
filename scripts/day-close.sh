@@ -79,11 +79,25 @@ do_backup() {
   # prevents a self-referencing ELOOP symlink from recurring here (WP-7 DOC8).
   # day-rhythm-config.yaml is excluded here and handled separately via merge (see below)
   # to preserve user-configured keys (e.g. calendar_ids) from being overwritten by template defaults.
+  # --include='*/' must come first: without it rsync never descends into subdirectories,
+  # so files under memory/reference/ and any other nested folder are silently skipped.
+  # Local fix 2026-08-02, verified on our data (memory/reference/agent-core.md was missing
+  # from the backup). Upstream issue: TserenTserenov/FMT-exocortex-template#343 — when the
+  # update lands, keep whichever form upstream ships, not both.
+  #
+  # --exclude='extensions/' is REQUIRED together with '*/'. The destination also holds
+  # exocortex/extensions/, mirrored there by .claude/hooks/memory-exocortex-sync.sh (WP-033,
+  # issue #235) — a different mechanism with a different source. While directories were
+  # invisible to rsync, --delete could not reach it; making them visible would wipe it on
+  # every day-close. Excluded paths are protected from --delete by default.
   rsync -aL --delete \
     --exclude='CLAUDE.md' \
     --exclude='day-rhythm-config.yaml' \
+    --exclude='extensions/' \
+    --include='*/' \
     --include='*.md' --include='*.yaml' --include='*.yml' \
     --exclude='*' \
+    --prune-empty-dirs \
     "$MEMORY_SRC/" "$EXOCORTEX_DST/"
 
   # Merge day-rhythm-config.yaml: use auto-memory as base, preserve non-empty user values in dst.
