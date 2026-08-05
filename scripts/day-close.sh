@@ -87,13 +87,29 @@ do_backup() {
   # -m goes with it: --include='*/' alone recreates the source's ENTIRE directory tree
   # in the backup, including .git/ internals whose files the final --exclude drops —
   # hundreds of empty dirs plus a fake exocortex/.git. -m prunes the empty ones.
+  # issue #352: --delete prunes anything in the destination that has no counterpart in
+  # auto-memory — but exocortex/ is not owned by this script alone. extensions/ is written
+  # by the user (and mirrored here so a restore brings customisations back); auto-memory has
+  # no extensions/ dir, so every run silently deleted the whole folder. Protect destination-
+  # only trees explicitly: they are backed-up content, not stale copies of memory.
   rsync -aLm --delete \
     --exclude='CLAUDE.md' \
     --exclude='day-rhythm-config.yaml' \
+    --filter='protect extensions/***' \
     --include='*/' \
     --include='*.md' --include='*.yaml' --include='*.yml' \
     --exclude='*' \
     "$MEMORY_SRC/" "$EXOCORTEX_DST/"
+
+  # Mirror the live extensions/ dir into the backup — it is the user layer and the whole
+  # reason a restore is useful. Separate pass: source is the workspace, not auto-memory.
+  if [ -d "$WORKSPACE_DIR/extensions" ]; then
+    mkdir -p "$EXOCORTEX_DST/extensions"
+    rsync -aLm --delete \
+      --include='*/' --include='*.md' --include='*.yaml' --include='*.yml' \
+      --exclude='*' \
+      "$WORKSPACE_DIR/extensions/" "$EXOCORTEX_DST/extensions/"
+  fi
 
   # Merge day-rhythm-config.yaml: use auto-memory as base, preserve non-empty user values in dst.
   # User-configurable keys protected: day_open.calendar_ids
