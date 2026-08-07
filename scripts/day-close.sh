@@ -76,6 +76,10 @@ do_backup() {
   fi
 
   # Mirror *.md/*.yaml/*.yml from auto-memory; --delete prunes files removed upstream.
+  # exocortex/ is a multi-writer destination: extensions/, fault-profile, hindsight,
+  # and legacy decision logs are primary data written by other platform mechanisms.
+  # Root-anchored excludes are therefore ownership boundaries, not copy masks. Rsync
+  # protects excluded receiver paths from --delete unless --delete-excluded is used.
   # CLAUDE.md is excluded so the workspace copy below isn't deleted by --delete.
   # -L (copy-links) dereferences symlinks so target content is copied, not the link —
   # prevents a self-referencing ELOOP symlink from recurring here (WP-7 DOC8).
@@ -87,29 +91,17 @@ do_backup() {
   # -m goes with it: --include='*/' alone recreates the source's ENTIRE directory tree
   # in the backup, including .git/ internals whose files the final --exclude drops —
   # hundreds of empty dirs plus a fake exocortex/.git. -m prunes the empty ones.
-  # issue #352: --delete prunes anything in the destination that has no counterpart in
-  # auto-memory — but exocortex/ is not owned by this script alone. extensions/ is written
-  # by the user (and mirrored here so a restore brings customisations back); auto-memory has
-  # no extensions/ dir, so every run silently deleted the whole folder. Protect destination-
-  # only trees explicitly: they are backed-up content, not stale copies of memory.
   rsync -aLm --delete \
     --exclude='CLAUDE.md' \
     --exclude='day-rhythm-config.yaml' \
-    --filter='protect extensions/***' \
+    --exclude='/extensions/***' \
+    --exclude='/agent-fault-profile/***' \
+    --exclude='/hindsight/***' \
+    --exclude='/decisions/***' \
     --include='*/' \
     --include='*.md' --include='*.yaml' --include='*.yml' \
     --exclude='*' \
     "$MEMORY_SRC/" "$EXOCORTEX_DST/"
-
-  # Mirror the live extensions/ dir into the backup — it is the user layer and the whole
-  # reason a restore is useful. Separate pass: source is the workspace, not auto-memory.
-  if [ -d "$WORKSPACE_DIR/extensions" ]; then
-    mkdir -p "$EXOCORTEX_DST/extensions"
-    rsync -aLm --delete \
-      --include='*/' --include='*.md' --include='*.yaml' --include='*.yml' \
-      --exclude='*' \
-      "$WORKSPACE_DIR/extensions/" "$EXOCORTEX_DST/extensions/"
-  fi
 
   # Merge day-rhythm-config.yaml: use auto-memory as base, preserve non-empty user values in dst.
   # User-configurable keys protected: day_open.calendar_ids
